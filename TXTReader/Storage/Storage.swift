@@ -174,6 +174,17 @@ final class LibraryStore: ObservableObject {
         reload()
     }
 
+    /// 按内容哈希查找是否已存在
+    func findDuplicate(hash: String?) -> Book? {
+        guard let hash, !hash.isEmpty else { return nil }
+        return storage.loadBooks().first { $0.contentHash == hash }
+    }
+
+    /// 丢弃未入库的书籍文件
+    func discard(_ book: Book) {
+        storage.deleteBookFiles(book)
+    }
+
     func chapters(for book: Book) -> [Chapter] {
         storage.loadChapters(bookId: book.id)
     }

@@ -75,10 +75,14 @@ struct WiFiImportView: View {
                 finished += 1
                 switch result {
                 case .success(let book):
-                    // 先落盘入库，解析交给后台
-                    library.add(book)
-                    library.parseChapters(for: book)
-                    message = "已接收 \(finished)/\(urls.count)：\(book.title)（后台解析中）"
+                    if let existing = library.findDuplicate(hash: book.contentHash) {
+                        library.discard(book)
+                        message = "《\(existing.title)》已导入过，已跳过"
+                    } else {
+                        library.add(book)
+                        library.parseChapters(for: book)
+                        message = "已接收 \(finished)/\(urls.count)：\(book.title)（后台解析中）"
+                    }
                 case .failure(let error):
                     message = "第 \(finished)/\(urls.count) 个导入失败：\(error.localizedDescription)"
                 }

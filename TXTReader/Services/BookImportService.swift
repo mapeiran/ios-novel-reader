@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// 书籍导入：先快速落盘 + 建记录，再后台解析分章
 final class BookImportService {
@@ -35,6 +36,7 @@ final class BookImportService {
                 DebugLog.log("import copied size=\(size)")
                 guard size > 0 else { throw AppError.emptyContent }
 
+                let hash = Self.fileHash(at: fileURL)
                 let title = (url.lastPathComponent as NSString).deletingPathExtension
                 let book = Book(id: id,
                                 title: title,
@@ -47,13 +49,27 @@ final class BookImportService {
                                 chapterRule: pattern,
                                 addedAt: Date(),
                                 lastReadAt: nil,
-                                parseState: .pending)
+                                parseState: .pending,
+                                contentHash: hash)
                 DispatchQueue.main.async { completion(.success(book)) }
             } catch {
                 DebugLog.log("import failed: \(error)")
                 DispatchQueue.main.async { completion(.failure(error)) }
             }
         }
+    }
+
+    /// 计算文件内容 SHA256（流式，避免整包载入）
+    static func fileHash(at url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let chunk = (try? handle.read(upToCount: 1 << 20)) ?? Data()
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     /// 多种方式读取外部文件，兼容「文件」App / iCloud provider URL

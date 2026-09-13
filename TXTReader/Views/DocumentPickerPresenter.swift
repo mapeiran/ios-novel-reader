@@ -28,7 +28,7 @@ final class DocumentPickerPresenter: NSObject, UIDocumentPickerDelegate {
         }
 
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item],
-                                                    asCopy: false)
+                                                    asCopy: true)
         picker.allowsMultipleSelection = true
         picker.shouldShowFileExtensions = true
         picker.delegate = self

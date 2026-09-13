@@ -17,6 +17,7 @@ struct BookshelfView: View {
     @State private var selectedBook: Book?
     @State private var importing = false
     @State private var errorMessage: String?
+    @State private var duplicateMessage: String?
     @State private var renameBook: Book?
     @State private var renameText = ""
     @AppStorage("bookshelf.sort") private var sortRaw = BookSort.added.rawValue
@@ -145,6 +146,13 @@ struct BookshelfView: View {
                 renameBook = nil
             }
         }
+        .alert("重复导入", isPresented: Binding(
+            get: { duplicateMessage != nil },
+            set: { if !$0 { duplicateMessage = nil } })) {
+            Button("好", role: .cancel) { duplicateMessage = nil }
+        } message: {
+            Text(duplicateMessage ?? "")
+        }
         .onAppear { DebugLog.log("Bookshelf onAppear") }
     }
 
@@ -175,8 +183,13 @@ struct BookshelfView: View {
                 finished += 1
                 switch res {
                 case .success(let book):
-                    library.add(book)
-                    library.parseChapters(for: book)
+                    if let existing = library.findDuplicate(hash: book.contentHash) {
+                        library.discard(book)
+                        duplicateMessage = "《\(existing.title)》已经导入过了，已跳过。"
+                    } else {
+                        library.add(book)
+                        library.parseChapters(for: book)
+                    }
                 case .failure(let error):
                     DebugLog.log("import failure=\(error.localizedDescription)")
                     errorMessage = error.localizedDescription

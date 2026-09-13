@@ -8,6 +8,7 @@ enum AppError: LocalizedError {
     case fileTooLarge
     case regexInvalid
     case portInUse
+    case duplicateBook(String)
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,7 @@ enum AppError: LocalizedError {
         case .fileTooLarge:   return "文件过大，暂不支持。"
         case .regexInvalid:   return "分章正则无效。"
         case .portInUse:      return "端口被占用，请更换端口。"
+        case .duplicateBook(let title): return "《\(title)》已经导入过了。"
         }
     }
 }

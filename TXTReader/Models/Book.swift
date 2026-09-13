@@ -28,6 +28,8 @@ struct Book: Codable, Identifiable, Hashable {
     var progress: Double = 0
     /// 解析状态（nil 视为已完成，兼容旧数据）
     var parseState: ParseState?
+    /// 内容哈希（用于重复导入检测）
+    var contentHash: String?
 
     var isParsing: Bool {
         parseState == .pending || parseState == .parsing
