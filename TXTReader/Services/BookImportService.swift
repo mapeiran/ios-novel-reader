@@ -15,7 +15,7 @@ final class BookImportService {
         DispatchQueue.global(qos: .userInitiated).async {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            NSLog("[TXTReader] import start: %@ (scoped=%d)", url.path, accessed ? 1 : 0)
+            DebugLog.log("import start: \(url.path) scoped=\(accessed)")
 
             do {
                 let id = UUID()
@@ -32,7 +32,7 @@ final class BookImportService {
 
                 let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
                 let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
-                NSLog("[TXTReader] import copied size=%lld", size)
+                DebugLog.log("import copied size=\(size)")
                 guard size > 0 else { throw AppError.emptyContent }
 
                 let title = (url.lastPathComponent as NSString).deletingPathExtension
@@ -50,7 +50,7 @@ final class BookImportService {
                                 parseState: .pending)
                 DispatchQueue.main.async { completion(.success(book)) }
             } catch {
-                NSLog("[TXTReader] import failed: %@", String(describing: error))
+                DebugLog.log("import failed: \(error)")
                 DispatchQueue.main.async { completion(.failure(error)) }
             }
         }
@@ -66,7 +66,7 @@ final class BookImportService {
             try FileManager.default.copyItem(at: url, to: dest)
             return
         } catch {
-            NSLog("[TXTReader] copyItem failed: %@", String(describing: error))
+            DebugLog.log("copyItem failed: \(error)")
         }
 
         // 2. 读取 Data 再写入

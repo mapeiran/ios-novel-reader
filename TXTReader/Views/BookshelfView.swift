@@ -13,7 +13,6 @@ struct BookshelfView: View {
     @Binding var selectedTab: Int
     @EnvironmentObject var library: LibraryStore
     @State private var showImportSheet = false
-    @State private var showImporter = false
     @State private var pendingFileImport = false
     @State private var selectedBook: Book?
     @State private var importing = false
@@ -101,20 +100,19 @@ struct BookshelfView: View {
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
             }
-            .fileImporter(isPresented: $showImporter,
-                          allowedContentTypes: [.plainText, .text, .data],
-                          allowsMultipleSelection: true) { result in
-                handleImport(result)
-            }
             .sheet(isPresented: $showImportSheet, onDismiss: {
                 // 等弹窗完全关闭后再拉起文件选择器，避免呈现冲突
+                DebugLog.log("sheet onDismiss pendingFileImport=\(pendingFileImport)")
                 if pendingFileImport {
                     pendingFileImport = false
-                    showImporter = true
+                    DocumentPickerPresenter.shared.present { urls in
+                        handleURLs(urls)
+                    }
                 }
             }) {
                 ImportOptionsView(
                     onPickFile: {
+                        DebugLog.log("pick file tapped")
                         pendingFileImport = true
                         showImportSheet = false
                     },
@@ -147,6 +145,7 @@ struct BookshelfView: View {
                 renameBook = nil
             }
         }
+        .onAppear { DebugLog.log("Bookshelf onAppear") }
     }
 
     private var emptyState: some View {
@@ -164,28 +163,26 @@ struct BookshelfView: View {
         }
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard !urls.isEmpty else { return }
-            importing = true
-            let service = BookImportService(storage: library.storage)
-            var finished = 0
-            for url in urls {
-                service.importFile(at: url) { res in
-                    finished += 1
-                    switch res {
-                    case .success(let book):
-                        library.add(book)
-                        library.parseChapters(for: book)
-                    case .failure(let error):
-                        errorMessage = error.localizedDescription
-                    }
-                    if finished == urls.count { importing = false }
+    private func handleURLs(_ urls: [URL]) {
+        DebugLog.log("handleURLs count=\(urls.count)")
+        guard !urls.isEmpty else { return }
+        importing = true
+        let service = BookImportService(storage: library.storage)
+        var finished = 0
+        for url in urls {
+            DebugLog.log("importing url=\(url.path)")
+            service.importFile(at: url) { res in
+                finished += 1
+                switch res {
+                case .success(let book):
+                    library.add(book)
+                    library.parseChapters(for: book)
+                case .failure(let error):
+                    DebugLog.log("import failure=\(error.localizedDescription)")
+                    errorMessage = error.localizedDescription
                 }
+                if finished == urls.count { importing = false }
             }
-        case .failure(let error):
-            errorMessage = error.localizedDescription
         }
     }
 }
