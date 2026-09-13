@@ -70,6 +70,8 @@ struct WiFiImportView: View {
     private func importFiles(_ urls: [URL]) {
         let service = BookImportService(storage: library.storage)
         var finished = 0
+        var imported = 0
+        var duplicates: [String] = []
         for url in urls {
             service.importFile(at: url) { result in
                 finished += 1
@@ -77,14 +79,22 @@ struct WiFiImportView: View {
                 case .success(let book):
                     if let existing = library.findDuplicate(hash: book.contentHash) {
                         library.discard(book)
-                        message = "《\(existing.title)》已导入过，已跳过"
+                        duplicates.append(existing.title)
                     } else {
                         library.add(book)
                         library.parseChapters(for: book)
-                        message = "已接收 \(finished)/\(urls.count)：\(book.title)（后台解析中）"
+                        imported += 1
                     }
                 case .failure(let error):
                     message = "第 \(finished)/\(urls.count) 个导入失败：\(error.localizedDescription)"
+                }
+                if finished == urls.count {
+                    var parts: [String] = []
+                    if imported > 0 { parts.append("已导入 \(imported) 本（后台解析中）") }
+                    if !duplicates.isEmpty {
+                        parts.append("已跳过重复：\n" + duplicates.map { "《\($0)》" }.joined(separator: "\n"))
+                    }
+                    if !parts.isEmpty { message = parts.joined(separator: "\n") }
                 }
             }
         }

@@ -177,6 +177,9 @@ struct BookshelfView: View {
         importing = true
         let service = BookImportService(storage: library.storage)
         var finished = 0
+        var duplicates: [String] = []
+        var failures: [String] = []
+
         for url in urls {
             DebugLog.log("importing url=\(url.path)")
             service.importFile(at: url) { res in
@@ -185,16 +188,25 @@ struct BookshelfView: View {
                 case .success(let book):
                     if let existing = library.findDuplicate(hash: book.contentHash) {
                         library.discard(book)
-                        duplicateMessage = "《\(existing.title)》已经导入过了，已跳过。"
+                        duplicates.append(existing.title)
                     } else {
                         library.add(book)
                         library.parseChapters(for: book)
                     }
                 case .failure(let error):
                     DebugLog.log("import failure=\(error.localizedDescription)")
-                    errorMessage = error.localizedDescription
+                    failures.append(error.localizedDescription)
                 }
-                if finished == urls.count { importing = false }
+
+                if finished == urls.count {
+                    importing = false
+                    if !duplicates.isEmpty {
+                        duplicateMessage = "以下文档已经导入过，已跳过：\n"
+                            + duplicates.map { "《\($0)》" }.joined(separator: "\n")
+                    } else if !failures.isEmpty {
+                        errorMessage = failures.joined(separator: "\n")
+                    }
+                }
             }
         }
     }

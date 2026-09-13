@@ -29,7 +29,8 @@ final class DocumentPickerPresenter: NSObject, UIDocumentPickerDelegate {
 
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item],
                                                     asCopy: true)
-        picker.allowsMultipleSelection = true
+        // 单选：最近项目里点文件即选中并可直接“打开”，无需先点“选择”
+        picker.allowsMultipleSelection = false
         picker.shouldShowFileExtensions = true
         picker.delegate = self
         top.present(picker, animated: true)
