@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Xcode 15.3+ 用 app-store-connect；更早版本用 app-store -->
+    <key>method</key>
+    <string>app-store-connect</string>
+    <!-- 换成你的付费团队 ID（Apple Developer 会员的 Team ID） -->
+    <key>teamID</key>
+    <string>REPLACE_WITH_PAID_TEAM_ID</string>
+    <key>uploadSymbols</key>
+    <true/>
+    <key>compileBitcode</key>
+    <false/>
+    <key>destination</key>
+    <string>export</string>
+</dict>
+</plist>
