@@ -1,0 +1,182 @@
+import Foundation
+import Combine
+
+/// 轻量持久化：正文存沙盒文件，元数据/章节/进度存 JSON。
+/// 生产环境建议替换为 SQLite(GRDB)。
+final class Storage {
+    let root: URL
+    let booksDirectory: URL
+
+    init() {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        root = base.appendingPathComponent("TXTReader", isDirectory: true)
+        booksDirectory = root.appendingPathComponent("Books", isDirectory: true)
+        try? FileManager.default.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
+    }
+
+    private var booksFile: URL { root.appendingPathComponent("books.json") }
+    private func chaptersFile(bookId: UUID) -> URL { root.appendingPathComponent("chapters-\(bookId.uuidString).json") }
+    private func progressFile() -> URL { root.appendingPathComponent("progress.json") }
+
+    private func read<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    private func write<T: Encodable>(_ value: T, to url: URL) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        guard let data = try? encoder.encode(value) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    // MARK: - Books
+
+    func loadBooks() -> [Book] { read([Book].self, from: booksFile) ?? [] }
+    func saveBooks(_ books: [Book]) { write(books, to: booksFile) }
+
+    // MARK: - Chapters
+
+    func loadChapters(bookId: UUID) -> [Chapter] {
+        read([Chapter].self, from: chaptersFile(bookId: bookId)) ?? []
+    }
+    func saveChapters(_ chapters: [Chapter], bookId: UUID) {
+        write(chapters, to: chaptersFile(bookId: bookId))
+    }
+
+    // MARK: - Progress
+
+    func loadRecords() -> [UUID: ReadingRecord] {
+        read([UUID: ReadingRecord].self, from: progressFile()) ?? [:]
+    }
+    func saveRecords(_ records: [UUID: ReadingRecord]) {
+        write(records, to: progressFile())
+    }
+
+    // MARK: - Files
+
+    func bookFileURL(for id: UUID) -> URL {
+        booksDirectory.appendingPathComponent("\(id.uuidString).txt")
+    }
+
+    func deleteBookFiles(_ book: Book) {
+        try? FileManager.default.removeItem(atPath: book.filePath)
+        try? FileManager.default.removeItem(at: chaptersFile(bookId: book.id))
+    }
+}
+
+/// 书架数据源
+final class LibraryStore: ObservableObject {
+    @Published private(set) var books: [Book] = []
+    let storage = Storage()
+    private let progressStore: ReadingProgressStore
+
+    init() {
+        progressStore = ReadingProgressStore(storage: storage)
+        reload()
+    }
+
+    func reload() {
+        let records = progressStore.allRecords()
+        var loaded = storage.loadBooks()
+
+        // 修复容器路径变化（重装/升级）导致的失效路径
+        var repaired = false
+        for index in loaded.indices where !FileManager.default.fileExists(atPath: loaded[index].filePath) {
+            let candidate = storage.bookFileURL(for: loaded[index].id)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                loaded[index].filePath = candidate.path
+                repaired = true
+            }
+        }
+        if repaired { storage.saveBooks(loaded) }
+
+        books = loaded.map { book in
+            var b = book
+            b.progress = records[book.id]?.percent ?? 0
+            return b
+        }
+    }
+
+    func add(_ book: Book) {
+        var list = storage.loadBooks()
+        list.insert(book, at: 0)
+        storage.saveBooks(list)
+        reload()
+    }
+
+    /// 更新书籍（可选覆盖章节）
+    func update(_ book: Book, chapters: [Chapter]? = nil) {
+        if let chapters {
+            storage.saveChapters(chapters, bookId: book.id)
+        }
+        var list = storage.loadBooks()
+        if let index = list.firstIndex(where: { $0.id == book.id }) {
+            list[index] = book
+        } else {
+            list.insert(book, at: 0)
+        }
+        storage.saveBooks(list)
+        reload()
+    }
+
+    /// 后台解析章节，完成后更新书架
+    func parseChapters(for book: Book) {
+        var parsing = book
+        parsing.parseState = .parsing
+        update(parsing)
+
+        BookImportService(storage: storage).parse(book) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let (updated, chapters)):
+                self.update(updated, chapters: chapters)
+            case .failure:
+                var failed = book
+                failed.parseState = .failed
+                self.update(failed)
+            }
+        }
+    }
+
+    func remove(at offsets: IndexSet) {
+        var list = storage.loadBooks()
+        for index in offsets.sorted(by: >) where index < list.count {
+            storage.deleteBookFiles(list[index])
+            progressStore.clear(bookId: list[index].id)
+            list.remove(at: index)
+        }
+        storage.saveBooks(list)
+        reload()
+    }
+
+    /// 删除单本书
+    func remove(_ book: Book) {
+        var list = storage.loadBooks()
+        if let index = list.firstIndex(where: { $0.id == book.id }) {
+            storage.deleteBookFiles(list[index])
+            progressStore.clear(bookId: book.id)
+            list.remove(at: index)
+        }
+        storage.saveBooks(list)
+        reload()
+    }
+
+    /// 重命名
+    func rename(_ book: Book, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var list = storage.loadBooks()
+        if let index = list.firstIndex(where: { $0.id == book.id }) {
+            list[index].title = trimmed
+        }
+        storage.saveBooks(list)
+        reload()
+    }
+
+    func chapters(for book: Book) -> [Chapter] {
+        storage.loadChapters(bookId: book.id)
+    }
+
+    func progressStoreInstance() -> ReadingProgressStore { progressStore }
+}
