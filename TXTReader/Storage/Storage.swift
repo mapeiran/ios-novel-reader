@@ -60,7 +60,12 @@ final class Storage {
     }
 
     func deleteBookFiles(_ book: Book) {
-        try? FileManager.default.removeItem(atPath: book.filePath)
+        // 只删除沙盒 Books 目录内的副本，绝不触碰外部源文件
+        let path = URL(fileURLWithPath: book.filePath).standardizedFileURL.path
+        let booksPath = booksDirectory.standardizedFileURL.path
+        if path.hasPrefix(booksPath + "/") {
+            try? FileManager.default.removeItem(atPath: path)
+        }
         try? FileManager.default.removeItem(at: chaptersFile(bookId: book.id))
     }
 }

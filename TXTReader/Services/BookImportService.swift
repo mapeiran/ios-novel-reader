@@ -22,9 +22,11 @@ final class BookImportService {
                 let id = UUID()
                 let fileURL = self.storage.bookFileURL(for: id)
 
-                // 自家临时文件（局域网）可直接移动；外部文件用多种方式读取
-                let isOwnTemp = url.path.hasPrefix(FileManager.default.temporaryDirectory.path)
-                if isOwnTemp {
+                // 仅对自家 HTTP 服务器写入 tmp 根目录的临时文件做移动；其余一律拷贝，
+                // 避免移动/删除外部源文件（如「最近项目」「文件」App、Inbox 中的文件）
+                let tmpPath = FileManager.default.temporaryDirectory.standardizedFileURL.path
+                let parentPath = url.deletingLastPathComponent().standardizedFileURL.path
+                if parentPath == tmpPath {
                     try? FileManager.default.moveItem(at: url, to: fileURL)
                 }
                 if !FileManager.default.fileExists(atPath: fileURL.path) {
