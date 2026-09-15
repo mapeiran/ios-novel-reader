@@ -119,7 +119,7 @@ struct BookshelfView: View {
                     },
                     onWiFi: {
                         showImportSheet = false
-                        selectedTab = 1
+                        selectedTab = 2
                     })
             }
             .alert("导入失败", isPresented: Binding(

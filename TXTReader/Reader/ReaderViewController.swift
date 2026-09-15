@@ -43,6 +43,8 @@ final class ReaderViewController: UIViewController {
     private let settings: ReaderSettings
     private let progressStore: ReadingProgressStore
     private var cancellables = Set<AnyCancellable>()
+    private let speech = SpeechService()
+    private weak var speechButton: UIButton?
 
     private let backgroundView = UIView()
     private let pageContainer = UIView()
@@ -128,6 +130,7 @@ final class ReaderViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        stopSpeech()
         saveProgress()
     }
 
@@ -227,6 +230,9 @@ final class ReaderViewController: UIViewController {
 
         menuStack.addArrangedSubview(makeMenuButton("目录", #selector(menuChapters)))
         menuStack.addArrangedSubview(makeMenuButton("搜索", #selector(menuSearch)))
+        let speak = makeMenuButton("朗读", #selector(menuSpeech))
+        speechButton = speak
+        menuStack.addArrangedSubview(speak)
         menuStack.addArrangedSubview(makeMenuButton("上一章", #selector(menuPrevChapter)))
         menuStack.addArrangedSubview(makeMenuButton("下一章", #selector(menuNextChapter)))
         menuStack.addArrangedSubview(makeMenuButton("设置", #selector(menuSettings)))
@@ -317,6 +323,52 @@ final class ReaderViewController: UIViewController {
     @objc private func menuSettings() {
         if isMenuVisible { toggleMenu() }
         presentSettings()
+    }
+
+    // MARK: - 语音朗读
+
+    @objc private func menuSpeech() {
+        if speech.isSpeaking || speech.isPaused {
+            stopSpeech()
+        } else {
+            startSpeech()
+        }
+    }
+
+    private func startSpeech() {
+        speech.onFinishUtterance = { [weak self] in self?.advanceForSpeech() }
+        speechButton?.setTitle("停止", for: .normal)
+        speakCurrentPage()
+    }
+
+    private func stopSpeech() {
+        speech.stop()
+        speech.onFinishUtterance = nil
+        speechButton?.setTitle("朗读", for: .normal)
+    }
+
+    private func speakCurrentPage() {
+        let pages = viewModel.buildPages(forChapter: currentChapter)
+        guard pages.indices.contains(currentPage) else {
+            stopSpeech()
+            return
+        }
+        speech.speak(pages[currentPage].content.string)
+    }
+
+    /// 读完一页后自动翻页续读
+    private func advanceForSpeech() {
+        guard speech.isSpeaking || speech.isPaused else { return }
+        let pages = viewModel.buildPages(forChapter: currentChapter)
+        let hasNext = (currentPage + 1 < pages.count) || (currentChapter + 1 < viewModel.chapters.count)
+        guard hasNext else {
+            stopSpeech()
+            return
+        }
+        goNext()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.speakCurrentPage()
+        }
     }
 
     // MARK: - 目录侧边栏
@@ -443,7 +495,7 @@ final class ReaderViewController: UIViewController {
     }
 
     private func presentSettings() {
-        let host = UIHostingController(rootView: ReaderSettingsView(settings: settings))
+        let host = UIHostingController(rootView: ReaderSettingsView(settings: settings, speech: speech))
         host.modalPresentationStyle = .pageSheet
         host.overrideUserInterfaceStyle = settings.typography.themeIndex == 1 ? .dark : .light
         if let presentation = host.sheetPresentationController {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderSettingsView: View {
     @ObservedObject var settings: ReaderSettings
+    @ObservedObject var speech: SpeechService
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -36,6 +37,22 @@ struct ReaderSettingsView: View {
                     Picker("翻页方式", selection: $settings.style) {
                         ForEach(PageTurnStyle.allCases) { style in
                             Text(style.displayName).tag(style)
+                        }
+                    }
+                }
+
+                Section("朗读") {
+                    HStack {
+                        Text("慢")
+                        Slider(value: $speech.rate, in: 0.3...0.7)
+                        Text("快")
+                    }
+                    Picker("音色", selection: Binding(
+                        get: { speech.voiceIdentifier ?? "" },
+                        set: { speech.voiceIdentifier = $0.isEmpty ? nil : $0 })) {
+                        Text("默认").tag("")
+                        ForEach(SpeechService.chineseVoices, id: \.identifier) { voice in
+                            Text(voice.name).tag(voice.identifier)
                         }
                     }
                 }

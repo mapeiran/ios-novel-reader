@@ -61,6 +61,36 @@ final class BookImportService {
         }
     }
 
+    /// 从纯文本创建书籍（在线书源导入）
+    func importText(_ text: String,
+                    title: String,
+                    author: String? = nil,
+                    pattern: String = ChapterRule.defaultPattern) throws -> (Book, [Chapter]) {
+        let normalized = EncodingDetector.normalize(text)
+        guard normalized.contains(where: { !$0.isWhitespace }) else { throw AppError.emptyContent }
+
+        let id = UUID()
+        let fileURL = storage.bookFileURL(for: id)
+        guard let data = normalized.data(using: .utf8) else { throw AppError.encodingFailed }
+        try data.write(to: fileURL, options: .atomic)
+
+        let chapters = ChapterParser.parse(text: normalized, bookId: id, pattern: pattern)
+        let book = Book(id: id,
+                        title: title,
+                        author: author,
+                        filePath: fileURL.path,
+                        encoding: "UTF-8",
+                        fileSize: Int64(data.count),
+                        totalChars: (normalized as NSString).length,
+                        chapterCount: chapters.count,
+                        chapterRule: pattern,
+                        addedAt: Date(),
+                        lastReadAt: nil,
+                        parseState: .done,
+                        contentHash: Self.fileHash(at: fileURL))
+        return (book, chapters)
+    }
+
     /// 计算文件内容 SHA256（流式，避免整包载入）
     static func fileHash(at url: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }

@@ -17,6 +17,7 @@ final class Storage {
     private var booksFile: URL { root.appendingPathComponent("books.json") }
     private func chaptersFile(bookId: UUID) -> URL { root.appendingPathComponent("chapters-\(bookId.uuidString).json") }
     private func progressFile() -> URL { root.appendingPathComponent("progress.json") }
+    private var sourcesFile: URL { root.appendingPathComponent("sources.json") }
 
     private func read<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
         guard let data = try? Data(contentsOf: url) else { return nil }
@@ -51,6 +52,15 @@ final class Storage {
     }
     func saveRecords(_ records: [UUID: ReadingRecord]) {
         write(records, to: progressFile())
+    }
+
+    // MARK: - Book Sources
+
+    func loadBookSources() -> [BookSource] {
+        read([BookSource].self, from: sourcesFile) ?? []
+    }
+    func saveBookSources(_ sources: [BookSource]) {
+        write(sources, to: sourcesFile)
     }
 
     // MARK: - Files
@@ -108,6 +118,12 @@ final class LibraryStore: ObservableObject {
         list.insert(book, at: 0)
         storage.saveBooks(list)
         reload()
+    }
+
+    /// 添加已解析完成的书籍（在线导入）
+    func add(_ book: Book, chapters: [Chapter]) {
+        storage.saveChapters(chapters, bookId: book.id)
+        add(book)
     }
 
     /// 更新书籍（可选覆盖章节）
