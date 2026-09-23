@@ -41,29 +41,29 @@ struct FormatResult {
     var stats: FormatStats
 }
 
-/// TXT 智能格式化引擎（纯函数，便于测试）
+/// TXT 智能格式化引擎（预编译正则，纯函数，便于测试）
 enum TextFormatter {
 
     private static let blankSet = CharacterSet(charactersIn: " \t\u{3000}")
+
     private static let garbageRegex = try? NSRegularExpression(
         pattern: "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\uFFFD\\u200B-\\u200F\\uFEFF]")
 
-    /// 常见网文广告行
-    private static let adPatterns: [String] = [
-        "本章未完.*?(请|点击).*?页",
-        "请记住本站.*",
-        ".*本书首发.*",
-        ".*(最新章节|更新最快).*",
-        ".*(手机版|手机阅读|阅读网址).*",
-        ".*https?://\\S+.*",
-        ".*www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}.*",
-        ".*[a-zA-Z0-9-]+\\.(com|cn|net|org)\\b.*",
-        ".*(求收藏|求推荐|求月票|求订阅).*",
-        ".*(加入书签|加入书架|方便阅读).*",
-        ".*(天才一秒记住|一秒记住).*",
-        ".*(笔趣|顶点|燃文|无弹窗).*",
-        ".*(本站首发|首发地址).*",
-    ]
+    private static let spaceRegex = try? NSRegularExpression(pattern: "[ \t\u{3000}]{2,}")
+
+    /// 合并为单个广告正则（一次匹配/行，避免逐条正则）
+    private static let adRegex: NSRegularExpression? = {
+        let keywords = [
+            "本章未完", "请记住本站", "本书首发", "最新章节", "更新最快",
+            "手机版", "手机阅读", "阅读网址", "加入书签", "加入书架",
+            "方便阅读", "天才一秒记住", "一秒记住", "笔趣", "顶点", "燃文", "无弹窗",
+            "求收藏", "求推荐", "求月票", "求订阅", "本站首发", "首发地址",
+            "https?://", "www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+            "[a-zA-Z0-9-]+\\.(com|cn|net|org)",
+        ]
+        return try? NSRegularExpression(pattern: keywords.joined(separator: "|"),
+                                        options: [.caseInsensitive])
+    }()
 
     // MARK: - 入口
 
@@ -74,6 +74,8 @@ enum TextFormatter {
         var text = EncodingDetector.normalize(raw)
         stats.originalChars = (text as NSString).length
 
+        let chapterRegex = try? NSRegularExpression(pattern: options.chapterPattern)
+
         // 2. 广告清理
         if options.cleanAds {
             let (cleaned, count) = removeAds(text)
@@ -82,29 +84,30 @@ enum TextFormatter {
             if count > 0 { stats.log.append("清理广告行 \(count) 行") }
         }
 
-        // 3. 逐行清洗
-        var lines = text.components(separatedBy: "\n")
+        // 3. 逐行清洗 + 段落合并
+        let lines = text.components(separatedBy: "\n")
         var out: [String] = []
         out.reserveCapacity(lines.count)
 
-        for (index, original) in lines.enumerated() {
+        for original in lines {
             var line = original
 
             if options.trimWhitespace {
                 line = line.trimmingCharacters(in: blankSet)
             }
-            if options.cleanGarbage {
-                line = removeGarbage(line)
+            if options.cleanGarbage, let regex = garbageRegex {
+                let range = NSRange(location: 0, length: (line as NSString).length)
+                line = regex.stringByReplacingMatches(in: line, options: [], range: range, withTemplate: "")
             }
-            if options.removeExtraSpaces {
-                line = line.replacingOccurrences(of: "[ \t\u{3000}]{2,}", with: " ",
-                                                 options: .regularExpression)
+            if options.removeExtraSpaces, let regex = spaceRegex {
+                let range = NSRange(location: 0, length: (line as NSString).length)
+                line = regex.stringByReplacingMatches(in: line, options: [], range: range, withTemplate: " ")
             }
 
             // 空行
             if line.isEmpty {
                 if options.normalizeBlankLines {
-                    if out.last != nil, out.last != "" {
+                    if let last = out.last, !last.isEmpty {
                         out.append("")
                     } else {
                         stats.blankLinesRemoved += 1
@@ -115,10 +118,10 @@ enum TextFormatter {
                 continue
             }
 
-            let isTitle = options.detectChapters && isChapterTitle(line)
+            let isTitle = options.detectChapters && isChapterTitle(line, regex: chapterRegex)
 
             if isTitle {
-                if out.last != "" { out.append("") }   // 标题前空行
+                if out.last != "" { out.append("") }
                 out.append(line)
                 continue
             }
@@ -126,14 +129,13 @@ enum TextFormatter {
             // 合并被切割的段落
             if options.mergeBrokenParagraphs,
                let last = out.last, !last.isEmpty,
-               !(options.detectChapters && isChapterTitle(last)),
+               !(options.detectChapters && isChapterTitle(last, regex: chapterRegex)),
                !endsWithSentencePunctuation(last) {
                 out[out.count - 1] = last + line
                 stats.paragraphsMerged += 1
             } else {
                 out.append(line)
             }
-            _ = index
         }
 
         var body = out.joined(separator: "\n")
@@ -146,14 +148,13 @@ enum TextFormatter {
 
         // 5. 段落缩进
         if options.indentParagraphs {
-            body = indent(body, options: options)
+            body = indent(body, options: options, chapterRegex: chapterRegex)
             stats.log.append("首行缩进已应用")
         }
 
         // 6. 章节统计
         let chapters = ChapterParser.parse(text: body, bookId: UUID(), pattern: options.chapterPattern)
         stats.chapters = chapters.count
-
         stats.formattedChars = (body as NSString).length
         if stats.paragraphsMerged > 0 { stats.log.append("合并断行 \(stats.paragraphsMerged) 处") }
         if stats.garbageLines > 0 { stats.log.append("清洗异常字符 \(stats.garbageLines) 行") }
@@ -165,50 +166,37 @@ enum TextFormatter {
     // MARK: - 规则实现
 
     private static func removeAds(_ text: String) -> (String, Int) {
+        guard let regex = adRegex else { return (text, 0) }
         var count = 0
-        var lines = text.components(separatedBy: "\n")
         var kept: [String] = []
-        kept.reserveCapacity(lines.count)
-
-        let regexes = adPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
-        for line in lines {
+        for line in text.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: blankSet)
-            var isAd = false
             if !trimmed.isEmpty {
                 let range = NSRange(location: 0, length: (trimmed as NSString).length)
-                for regex in regexes where regex.firstMatch(in: trimmed, options: [], range: range) != nil {
-                    isAd = true
-                    break
+                if regex.firstMatch(in: trimmed, options: [], range: range) != nil {
+                    count += 1
+                    continue
                 }
             }
-            if isAd {
-                count += 1
-            } else {
-                kept.append(line)
-            }
+            kept.append(line)
         }
-        lines = kept
-        return (lines.joined(separator: "\n"), count)
-    }
-
-    private static func removeGarbage(_ line: String) -> String {
-        guard let regex = garbageRegex else { return line }
-        let range = NSRange(location: 0, length: (line as NSString).length)
-        return regex.stringByReplacingMatches(in: line, options: [], range: range, withTemplate: "")
+        return (kept.joined(separator: "\n"), count)
     }
 
     static func isChapterTitle(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: blankSet)
-        guard !trimmed.isEmpty, trimmed.count <= 50 else { return false }
-        guard let regex = try? NSRegularExpression(pattern: ChapterRule.defaultPattern) else { return false }
-        let range = NSRange(location: 0, length: (trimmed as NSString).length)
-        return regex.firstMatch(in: trimmed, options: [.anchored], range: range) != nil
+        isChapterTitle(line, regex: try? NSRegularExpression(pattern: ChapterRule.defaultPattern))
+    }
+
+    private static func isChapterTitle(_ line: String, regex: NSRegularExpression?) -> Bool {
+        guard let regex else { return false }
+        guard !line.isEmpty, line.count <= 50 else { return false }
+        let range = NSRange(location: 0, length: (line as NSString).length)
+        return regex.firstMatch(in: line, options: [.anchored], range: range) != nil
     }
 
     private static func endsWithSentencePunctuation(_ line: String) -> Bool {
-        guard let last = line.trimmingCharacters(in: blankSet).last else { return true }
-        let endings = "。！？…\"”』」）】.!?"
-        return endings.contains(last)
+        guard let last = line.last else { return true }
+        return "。！？…\"”』」）】.!?".contains(last)
     }
 
     private static func normalizePunctuation(_ text: String) -> String {
@@ -224,12 +212,12 @@ enum TextFormatter {
         return result
     }
 
-    private static func indent(_ text: String, options: FormatOptions) -> String {
+    private static func indent(_ text: String, options: FormatOptions, chapterRegex: NSRegularExpression?) -> String {
         let indentStr = "\u{3000}\u{3000}"
         return text.components(separatedBy: "\n").map { line -> String in
             let trimmed = line.trimmingCharacters(in: blankSet)
             if trimmed.isEmpty { return "" }
-            if options.detectChapters && isChapterTitle(trimmed) { return trimmed }
+            if options.detectChapters && isChapterTitle(trimmed, regex: chapterRegex) { return trimmed }
             if trimmed.hasPrefix(indentStr) { return trimmed }
             return indentStr + trimmed
         }.joined(separator: "\n")
