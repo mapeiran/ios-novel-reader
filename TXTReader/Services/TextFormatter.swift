@@ -20,8 +20,18 @@ struct FormatOptions: Codable, Equatable {
     var indentParagraphs = false
     /// 去除多余空格 / TAB
     var removeExtraSpaces = true
+    /// 繁简转换
+    var scriptConversion: ScriptConversion = .none
 
     var chapterPattern: String = ChapterRule.defaultPattern
+}
+
+/// 繁简转换方式
+enum ScriptConversion: String, Codable, CaseIterable, Identifiable {
+    case none = "不转换"
+    case toSimplified = "繁体 → 简体"
+    case toTraditional = "简体 → 繁体"
+    var id: String { rawValue }
 }
 
 /// 格式化统计
@@ -152,6 +162,12 @@ enum TextFormatter {
             stats.log.append("首行缩进已应用")
         }
 
+        // 5.5 繁简转换
+        if options.scriptConversion != .none {
+            body = convertScript(body, to: options.scriptConversion)
+            stats.log.append("已执行\(options.scriptConversion.rawValue)")
+        }
+
         // 6. 章节统计
         let chapters = ChapterParser.parse(text: body, bookId: UUID(), pattern: options.chapterPattern)
         stats.chapters = chapters.count
@@ -197,6 +213,18 @@ enum TextFormatter {
     private static func endsWithSentencePunctuation(_ line: String) -> Bool {
         guard let last = line.last else { return true }
         return "。！？…\"”』」）】.!?".contains(last)
+    }
+
+    private static func convertScript(_ text: String, to conversion: ScriptConversion) -> String {
+        let transform: String
+        switch conversion {
+        case .toSimplified:  transform = "Traditional-Simplified"
+        case .toTraditional: transform = "Simplified-Traditional"
+        case .none:          return text
+        }
+        let mutable = NSMutableString(string: text)
+        CFStringTransform(mutable, nil, transform as CFString, false)
+        return mutable as String
     }
 
     private static func normalizePunctuation(_ text: String) -> String {

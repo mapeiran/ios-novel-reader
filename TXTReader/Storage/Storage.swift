@@ -242,6 +242,12 @@ final class LibraryStore: ObservableObject {
         storage.hasBackup(for: book)
     }
 
+    /// 还原阅读记录
+    func restoreRecords(_ records: [UUID: ReadingRecord]) {
+        progressStore.replaceAll(records)
+        reload()
+    }
+
     func remove(at offsets: IndexSet) {
         var list = storage.loadBooks()
         for index in offsets.sorted(by: >) where index < list.count {

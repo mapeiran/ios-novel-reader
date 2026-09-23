@@ -30,4 +30,10 @@ final class ReadingProgressStore {
         cache.removeAll()
         storage.saveRecords(cache)
     }
+
+    /// 覆盖全部记录（数据还原）
+    func replaceAll(_ records: [UUID: ReadingRecord]) {
+        cache = records
+        storage.saveRecords(cache)
+    }
 }

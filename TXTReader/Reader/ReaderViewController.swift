@@ -97,7 +97,12 @@ final class ReaderViewController: UIViewController {
 
     override var prefersStatusBarHidden: Bool { true }
 
-    private var theme: ReaderTheme { ReaderTheme.theme(at: settings.typography.themeIndex) }
+    private var theme: ReaderTheme {
+        if settings.followSystemTheme, traitCollection.userInterfaceStyle == .dark {
+            return ReaderTheme.theme(at: 1)
+        }
+        return ReaderTheme.theme(at: settings.typography.themeIndex)
+    }
 
     // MARK: - 生命周期
 
@@ -120,7 +125,8 @@ final class ReaderViewController: UIViewController {
 
         let rect = ReaderLayout.readRect(in: view.bounds,
                                          safeTop: view.safeAreaInsets.top,
-                                         safeBottom: view.safeAreaInsets.bottom)
+                                         safeBottom: view.safeAreaInsets.bottom,
+                                         margin: settings.typography.margin)
         guard !didSetup, rect.width > 0, rect.height > 0 else { return }
         didSetup = true
         readRect = rect
@@ -128,10 +134,28 @@ final class ReaderViewController: UIViewController {
         rebuildPager()
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        applyKeepScreenOn()
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        UIApplication.shared.isIdleTimerDisabled = false
         stopSpeech()
         saveProgress()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard settings.followSystemTheme,
+              previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle else { return }
+        applyTheme()
+        rebuildPager()
+    }
+
+    private func applyKeepScreenOn() {
+        UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn
     }
 
     // MARK: - UI
@@ -409,7 +433,7 @@ final class ReaderViewController: UIViewController {
                                          self?.viewModel.search(keyword) ?? []
                                      })
         let host = UIHostingController(rootView: root)
-        host.overrideUserInterfaceStyle = settings.typography.themeIndex == 1 ? .dark : .light
+        host.overrideUserInterfaceStyle = theme.id == 1 ? .dark : .light
         host.view.backgroundColor = theme.background
         addChild(host)
         host.view.frame = container.bounds
@@ -452,6 +476,7 @@ final class ReaderViewController: UIViewController {
                     self.viewModel.typography = self.settings.typography
                     self.viewModel.invalidatePagination()
                     self.applyTheme()
+                    self.applyKeepScreenOn()
                     self.rebuildPager()
                 }
             }
@@ -497,7 +522,7 @@ final class ReaderViewController: UIViewController {
     private func presentSettings() {
         let host = UIHostingController(rootView: ReaderSettingsView(settings: settings, speech: speech))
         host.modalPresentationStyle = .pageSheet
-        host.overrideUserInterfaceStyle = settings.typography.themeIndex == 1 ? .dark : .light
+        host.overrideUserInterfaceStyle = theme.id == 1 ? .dark : .light
         if let presentation = host.sheetPresentationController {
             presentation.detents = [.medium(), .large()]
             presentation.prefersGrabberVisible = true

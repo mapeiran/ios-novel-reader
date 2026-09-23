@@ -22,6 +22,12 @@ struct RootView: View {
                 .environmentObject(library)
                 .tabItem { Label("WiFi传书", systemImage: "wifi") }
                 .tag(2)
+
+            AppSettingsView()
+                .environmentObject(library)
+                .environmentObject(sources)
+                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tag(3)
         }
     }
 }

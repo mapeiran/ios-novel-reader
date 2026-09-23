@@ -24,6 +24,14 @@ struct ReaderSettingsView: View {
                     Slider(value: $settings.typography.paragraphSpacing, in: 0...30, step: 1)
                 }
 
+                Section("字间距") {
+                    Slider(value: $settings.typography.letterSpacing, in: 0...5, step: 0.5)
+                }
+
+                Section("页边距") {
+                    Slider(value: $settings.typography.margin, in: 0...40, step: 1)
+                }
+
                 Section("主题") {
                     Picker("主题", selection: $settings.typography.themeIndex) {
                         ForEach(ReaderTheme.themes) { theme in
@@ -31,6 +39,11 @@ struct ReaderSettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    Toggle("跟随系统深色模式", isOn: $settings.followSystemTheme)
+                }
+
+                Section("屏幕") {
+                    Toggle("阅读时常亮", isOn: $settings.keepScreenOn)
                 }
 
                 Section("翻页方式") {

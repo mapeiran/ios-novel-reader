@@ -27,6 +27,9 @@ struct FormatPreviewView: View {
                     Toggle("标点标准化", isOn: $options.normalizePunctuation)
                     Toggle("首行缩进 2 字符", isOn: $options.indentParagraphs)
                     Toggle("去除多余空格", isOn: $options.removeExtraSpaces)
+                    Picker("繁简转换", selection: $options.scriptConversion) {
+                        ForEach(ScriptConversion.allCases) { Text($0.rawValue).tag($0) }
+                    }
                 }
 
                 if let result {

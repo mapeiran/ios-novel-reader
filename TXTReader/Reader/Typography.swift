@@ -30,6 +30,9 @@ struct Typography: Equatable {
     var fontSize: CGFloat = 18
     var lineSpacing: CGFloat = 7
     var paragraphSpacing: CGFloat = 15
+    var letterSpacing: CGFloat = 0
+    /// 左右页边距
+    var margin: CGFloat = 15
     var themeIndex: Int = 0
 
     func attributedString(for text: String) -> NSAttributedString {
@@ -41,18 +44,22 @@ struct Typography: Equatable {
         paragraph.lineBreakMode = .byCharWrapping
         paragraph.alignment = .justified
 
-        return NSAttributedString(string: text, attributes: [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .paragraphStyle: paragraph,
             .foregroundColor: ReaderTheme.theme(at: themeIndex).textColor,
-        ])
+        ]
+        if letterSpacing != 0 {
+            attributes[.kern] = letterSpacing
+        }
+        return NSAttributedString(string: text, attributes: attributes)
     }
 }
 
 /// 阅读区域计算
 enum ReaderLayout {
-    static func readRect(in bounds: CGRect, safeTop: CGFloat, safeBottom: CGFloat) -> CGRect {
-        let horizontalInset: CGFloat = 15
+    static func readRect(in bounds: CGRect, safeTop: CGFloat, safeBottom: CGFloat, margin: CGFloat = 15) -> CGRect {
+        let horizontalInset = max(0, margin)
         let topInset: CGFloat = safeTop + 35
         let bottomInset: CGFloat = safeBottom + 60
         return CGRect(x: horizontalInset,

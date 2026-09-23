@@ -65,6 +65,18 @@ final class BookSourceStore: ObservableObject {
         update(s)
     }
 
+    /// 合并导入（按 id 去重），返回新增数量
+    @discardableResult
+    func merge(_ list: [BookSource]) -> Int {
+        var added = 0
+        for source in list where !sources.contains(where: { $0.id == source.id }) {
+            sources.append(source)
+            added += 1
+        }
+        if added > 0 { save() }
+        return added
+    }
+
     /// 导入书源 JSON（支持单个对象或数组），返回导入数量
     @discardableResult
     func importJSON(_ json: String) throws -> Int {
