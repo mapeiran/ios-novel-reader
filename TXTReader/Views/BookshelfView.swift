@@ -6,6 +6,7 @@ enum BookSort: String, CaseIterable, Identifiable {
     case added = "加入时间"
     case lastRead = "阅读时间"
     case title = "文件名称"
+    case size = "文件大小"
     var id: String { rawValue }
 }
 
@@ -14,6 +15,7 @@ struct BookshelfView: View {
     @EnvironmentObject var library: LibraryStore
     @State private var showImportSheet = false
     @State private var pendingFileImport = false
+    @State private var pendingZipImport = false
     @State private var selectedBook: Book?
     @State private var importing = false
     @State private var errorMessage: String?
@@ -21,6 +23,7 @@ struct BookshelfView: View {
     @State private var renameBook: Book?
     @State private var renameText = ""
     @State private var formatBook: Book?
+    @State private var searchText = ""
     @AppStorage("bookshelf.sort") private var sortRaw = BookSort.added.rawValue
 
     private var sort: BookSort { BookSort(rawValue: sortRaw) ?? .added }
@@ -37,7 +40,16 @@ struct BookshelfView: View {
             return library.books.sorted {
                 $0.title.localizedStandardCompare($1.title) == .orderedAscending
             }
+        case .size:
+            return library.books.sorted { $0.fileSize > $1.fileSize }
         }
+    }
+
+    /// 搜索过滤（书名模糊匹配）
+    private var displayedBooks: [Book] {
+        let keyword = searchText.trimmingCharacters(in: .whitespaces)
+        guard !keyword.isEmpty else { return sortedBooks }
+        return sortedBooks.filter { $0.title.localizedCaseInsensitiveContains(keyword) }
     }
 
     var body: some View {
@@ -47,7 +59,7 @@ struct BookshelfView: View {
                     emptyState
                 } else {
                     List {
-                        ForEach(sortedBooks) { book in
+                        ForEach(displayedBooks) { book in
                             Button {
                                 if book.isParsing {
                                     errorMessage = "《\(book.title)》正在后台解析，请稍候再打开"
@@ -83,6 +95,7 @@ struct BookshelfView: View {
                 }
             }
             .navigationTitle("书架")
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索书名")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
@@ -110,18 +123,25 @@ struct BookshelfView: View {
             }
             .sheet(isPresented: $showImportSheet, onDismiss: {
                 // 等弹窗完全关闭后再拉起文件选择器，避免呈现冲突
-                DebugLog.log("sheet onDismiss pendingFileImport=\(pendingFileImport)")
                 if pendingFileImport {
                     pendingFileImport = false
                     DocumentPickerPresenter.shared.present { urls in
                         handleURLs(urls)
                     }
+                } else if pendingZipImport {
+                    pendingZipImport = false
+                    DocumentPickerPresenter.shared.present(contentTypes: [.zip, .archive]) { urls in
+                        importZip(urls)
+                    }
                 }
             }) {
                 ImportOptionsView(
                     onPickFile: {
-                        DebugLog.log("pick file tapped")
                         pendingFileImport = true
+                        showImportSheet = false
+                    },
+                    onPickZip: {
+                        pendingZipImport = true
                         showImportSheet = false
                     },
                     onWiFi: {
@@ -221,11 +241,46 @@ struct BookshelfView: View {
             }
         }
     }
+
+    /// ZIP 批量导入：解压出所有 .txt 后走普通导入流程
+    private func importZip(_ urls: [URL]) {
+        guard let url = urls.first else { return }
+        importing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let entries = try ZipArchiveReader.readTextEntries(at: url)
+                var tempURLs: [URL] = []
+                for entry in entries {
+                    let name = entry.name.components(separatedBy: "/").last ?? "book.txt"
+                    let tmp = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("\(UUID().uuidString)-\(name)")
+                    try entry.data.write(to: tmp, options: .atomic)
+                    tempURLs.append(tmp)
+                }
+                DispatchQueue.main.async {
+                    importing = false
+                    if tempURLs.isEmpty {
+                        errorMessage = "ZIP 中未找到 TXT 文件"
+                    } else {
+                        handleURLs(tempURLs)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    importing = false
+                    errorMessage = "解压失败：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
 }
 
 /// 导入方式选择（Sheet 半屏，点击空白处即可退出）
 struct ImportOptionsView: View {
     var onPickFile: () -> Void
+    var onPickZip: () -> Void
     var onWiFi: () -> Void
 
     var body: some View {
@@ -242,6 +297,14 @@ struct ImportOptionsView: View {
             .controlSize(.large)
             .padding(.horizontal, 24)
 
+            Button(action: onPickZip) {
+                Label("导入 ZIP（批量）", systemImage: "doc.zipper")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .padding(.horizontal, 24)
+
             Button(action: onWiFi) {
                 Label("WiFi 传书", systemImage: "wifi")
                     .frame(maxWidth: .infinity)
@@ -252,7 +315,7 @@ struct ImportOptionsView: View {
 
             Spacer(minLength: 0)
         }
-        .presentationDetents([.height(240)])
+        .presentationDetents([.height(320)])
         .presentationDragIndicator(.visible)
     }
 }

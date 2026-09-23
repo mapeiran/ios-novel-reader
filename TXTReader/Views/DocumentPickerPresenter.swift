@@ -9,7 +9,7 @@ final class DocumentPickerPresenter: NSObject, UIDocumentPickerDelegate {
     static let shared = DocumentPickerPresenter()
     private var onPick: (([URL]) -> Void)?
 
-    func present(onPick: @escaping ([URL]) -> Void) {
+    func present(contentTypes: [UTType] = [.item], onPick: @escaping ([URL]) -> Void) {
         self.onPick = onPick
 
         guard let scene = UIApplication.shared.connectedScenes
@@ -27,7 +27,7 @@ final class DocumentPickerPresenter: NSObject, UIDocumentPickerDelegate {
             top = presented
         }
 
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item],
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes,
                                                     asCopy: true)
         picker.allowsMultipleSelection = true
         picker.shouldShowFileExtensions = true
