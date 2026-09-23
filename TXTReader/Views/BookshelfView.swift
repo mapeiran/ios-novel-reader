@@ -20,6 +20,7 @@ struct BookshelfView: View {
     @State private var duplicateMessage: String?
     @State private var renameBook: Book?
     @State private var renameText = ""
+    @State private var formatBook: Book?
     @AppStorage("bookshelf.sort") private var sortRaw = BookSort.added.rawValue
 
     private var sort: BookSort { BookSort(rawValue: sortRaw) ?? .added }
@@ -70,6 +71,12 @@ struct BookshelfView: View {
                                     Label("重命名", systemImage: "pencil")
                                 }
                                 .tint(.blue)
+                                Button {
+                                    formatBook = book
+                                } label: {
+                                    Label("格式化", systemImage: "wand.and.stars")
+                                }
+                                .tint(.green)
                             }
                         }
                     }
@@ -121,6 +128,10 @@ struct BookshelfView: View {
                         showImportSheet = false
                         selectedTab = 2
                     })
+            }
+            .sheet(item: $formatBook) { book in
+                FormatPreviewView(book: book)
+                    .environmentObject(library)
             }
             .alert("导入失败", isPresented: Binding(
                 get: { errorMessage != nil },

@@ -77,6 +77,16 @@ final class Storage {
             try? FileManager.default.removeItem(atPath: path)
         }
         try? FileManager.default.removeItem(at: chaptersFile(bookId: book.id))
+        try? FileManager.default.removeItem(at: backupFileURL(for: book))
+    }
+
+    // MARK: - Format backup
+
+    func backupFileURL(for book: Book) -> URL {
+        URL(fileURLWithPath: book.filePath).appendingPathExtension("bak")
+    }
+    func hasBackup(for book: Book) -> Bool {
+        FileManager.default.fileExists(atPath: backupFileURL(for: book).path)
     }
 }
 
@@ -158,6 +168,78 @@ final class LibraryStore: ObservableObject {
                 self.update(failed)
             }
         }
+    }
+
+    // MARK: - 格式化
+
+    /// 覆盖保存格式化结果（备份原文件，可撤销）
+    @discardableResult
+    func overwriteWithFormatted(_ book: Book, text: String) -> Book? {
+        let url = URL(fileURLWithPath: book.filePath)
+        let backup = storage.backupFileURL(for: book)
+        if !FileManager.default.fileExists(atPath: backup.path) {
+            try? FileManager.default.copyItem(at: url, to: backup)
+        }
+
+        let normalized = EncodingDetector.normalize(text)
+        guard let data = normalized.data(using: .utf8) else { return nil }
+        do { try data.write(to: url, options: .atomic) } catch { return nil }
+
+        let chapters = ChapterParser.parse(text: normalized, bookId: book.id,
+                                           pattern: book.chapterRule ?? ChapterRule.defaultPattern)
+        storage.saveChapters(chapters, bookId: book.id)
+        progressStore.clear(bookId: book.id) // 字符偏移已变，清进度避免错位
+
+        var updated = book
+        updated.totalChars = (normalized as NSString).length
+        updated.chapterCount = chapters.count
+        updated.fileSize = Int64(data.count)
+        updated.contentHash = BookImportService.fileHash(at: url)
+        update(updated)
+        return updated
+    }
+
+    /// 另存为新的书籍
+    @discardableResult
+    func saveFormattedAsNew(_ book: Book, text: String) -> Book? {
+        do {
+            let (newBook, chapters) = try BookImportService(storage: storage)
+                .importText(text,
+                            title: book.title + "（格式化）",
+                            author: book.author,
+                            pattern: book.chapterRule ?? ChapterRule.defaultPattern)
+            add(newBook, chapters: chapters)
+            return newBook
+        } catch {
+            return nil
+        }
+    }
+
+    /// 撤销格式化（恢复备份）
+    @discardableResult
+    func undoFormat(_ book: Book) -> Bool {
+        let url = URL(fileURLWithPath: book.filePath)
+        let backup = storage.backupFileURL(for: book)
+        guard FileManager.default.fileExists(atPath: backup.path) else { return false }
+
+        try? FileManager.default.removeItem(at: url)
+        do { try FileManager.default.moveItem(at: backup, to: url) } catch { return false }
+
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            let chapters = ChapterParser.parse(text: text, bookId: book.id,
+                                               pattern: book.chapterRule ?? ChapterRule.defaultPattern)
+            storage.saveChapters(chapters, bookId: book.id)
+            var updated = book
+            updated.totalChars = (text as NSString).length
+            updated.chapterCount = chapters.count
+            updated.contentHash = BookImportService.fileHash(at: url)
+            update(updated)
+        }
+        return true
+    }
+
+    func hasFormatBackup(_ book: Book) -> Bool {
+        storage.hasBackup(for: book)
     }
 
     func remove(at offsets: IndexSet) {
