@@ -64,6 +64,60 @@ final class BookSourceService {
         return results
     }
 
+    // MARK: - 多源聚合搜索
+
+    struct AggregatedResult: Identifiable {
+        let id = UUID()
+        let sourceID: UUID
+        let sourceName: String
+        let result: OnlineSearchResult
+    }
+
+    /// 并发查询多个书源，聚合结果
+    func searchAll(keyword: String, sources: [BookSource]) async -> [AggregatedResult] {
+        await withTaskGroup(of: (BookSource, [OnlineSearchResult]).self) { group in
+            for source in sources {
+                group.addTask {
+                    let results = (try? await self.search(keyword: keyword, source: source)) ?? []
+                    return (source, results)
+                }
+            }
+            var aggregated: [AggregatedResult] = []
+            for await (source, results) in group {
+                for result in results {
+                    aggregated.append(AggregatedResult(sourceID: source.id,
+                                                       sourceName: source.name,
+                                                       result: result))
+                }
+            }
+            return aggregated
+        }
+    }
+
+    // MARK: - 书源测速
+
+    struct SourceHealth {
+        let ok: Bool
+        let latency: Double
+        let message: String?
+    }
+
+    func test(_ source: BookSource) async -> SourceHealth {
+        let start = Date()
+        do {
+            let urlString = source.searchURL
+                .replacingOccurrences(of: "{key}", with: "测试")
+                .replacingOccurrences(of: "{page}", with: "1")
+            let html = try await fetch(urlString, charset: source.charset)
+            let latency = Date().timeIntervalSince(start)
+            let ok = !html.isEmpty
+            return SourceHealth(ok: ok, latency: latency, message: ok ? nil : "空响应")
+        } catch {
+            return SourceHealth(ok: false, latency: Date().timeIntervalSince(start),
+                                message: error.localizedDescription)
+        }
+    }
+
     // MARK: - 目录
 
     func chapters(detailURL: String, source: BookSource) async throws -> [OnlineChapter] {

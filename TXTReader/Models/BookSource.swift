@@ -8,6 +8,16 @@ struct BookSource: Codable, Identifiable, Hashable {
     var enabled: Bool = true
     /// 网页编码：utf-8 / gbk
     var charset: String = "utf-8"
+    /// 分组
+    var group: String?
+    /// 置顶
+    var pinned: Bool?
+    /// 最近一次测速是否可用
+    var lastOK: Bool?
+    /// 最近一次测速耗时（秒）
+    var lastLatency: Double?
+
+    var isPinned: Bool { pinned ?? false }
 
     // 搜索
     /// 搜索地址，支持 {key} 与 {page} 占位
