@@ -248,6 +248,24 @@ final class LibraryStore: ObservableObject {
         reload()
     }
 
+    // MARK: - 分类文件夹
+
+    /// 所有已存在的文件夹（去重、排序）
+    var folders: [String] {
+        let set = Set(storage.loadBooks().compactMap { $0.folder }.filter { !$0.isEmpty })
+        return set.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// 移动书籍到文件夹（nil = 未分类）
+    func move(_ book: Book, to folder: String?) {
+        var list = storage.loadBooks()
+        guard let index = list.firstIndex(where: { $0.id == book.id }) else { return }
+        let trimmed = folder?.trimmingCharacters(in: .whitespacesAndNewlines)
+        list[index].folder = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        storage.saveBooks(list)
+        reload()
+    }
+
     func remove(at offsets: IndexSet) {
         var list = storage.loadBooks()
         for index in offsets.sorted(by: >) where index < list.count {

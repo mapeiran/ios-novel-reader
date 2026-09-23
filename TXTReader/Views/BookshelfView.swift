@@ -23,6 +23,8 @@ struct BookshelfView: View {
     @State private var renameBook: Book?
     @State private var renameText = ""
     @State private var formatBook: Book?
+    @State private var moveBook: Book?
+    @State private var folderFilter: String?
     @State private var searchText = ""
     @AppStorage("bookshelf.sort") private var sortRaw = BookSort.added.rawValue
 
@@ -45,11 +47,21 @@ struct BookshelfView: View {
         }
     }
 
-    /// 搜索过滤（书名模糊匹配）
+    /// 搜索过滤（书名模糊匹配）+ 文件夹过滤
     private var displayedBooks: [Book] {
+        var list = sortedBooks
+        if let filter = folderFilter {
+            if filter.isEmpty {
+                list = list.filter { ($0.folder ?? "").isEmpty }
+            } else {
+                list = list.filter { $0.folder == filter }
+            }
+        }
         let keyword = searchText.trimmingCharacters(in: .whitespaces)
-        guard !keyword.isEmpty else { return sortedBooks }
-        return sortedBooks.filter { $0.title.localizedCaseInsensitiveContains(keyword) }
+        if !keyword.isEmpty {
+            list = list.filter { $0.title.localizedCaseInsensitiveContains(keyword) }
+        }
+        return list
     }
 
     var body: some View {
@@ -89,6 +101,12 @@ struct BookshelfView: View {
                                     Label("格式化", systemImage: "wand.and.stars")
                                 }
                                 .tint(.green)
+                                Button {
+                                    moveBook = book
+                                } label: {
+                                    Label("移动", systemImage: "folder")
+                                }
+                                .tint(.indigo)
                             }
                         }
                     }
@@ -97,7 +115,20 @@ struct BookshelfView: View {
             .navigationTitle("书架")
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索书名")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItemGroup(placement: .navigationBarLeading) {
+                    Menu {
+                        Picker("分类", selection: Binding(
+                            get: { folderFilter ?? "__all__" },
+                            set: { folderFilter = ($0 == "__all__") ? nil : $0 })) {
+                            Text("全部").tag("__all__")
+                            Text("未分类").tag("")
+                            ForEach(library.folders, id: \.self) { folder in
+                                Text(folder).tag(folder)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "folder")
+                    }
                     Menu {
                         Picker("排序", selection: $sortRaw) {
                             ForEach(BookSort.allCases) { option in
@@ -152,6 +183,11 @@ struct BookshelfView: View {
             .sheet(item: $formatBook) { book in
                 FormatPreviewView(book: book)
                     .environmentObject(library)
+            }
+            .sheet(item: $moveBook) { book in
+                MoveToFolderView(book: book, folders: library.folders) { folder in
+                    library.move(book, to: folder)
+                }
             }
             .alert("导入失败", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -337,6 +373,9 @@ struct BookRow: View {
                 HStack(spacing: 12) {
                     Text("\(book.chapterCount) 章")
                     Text("\(Int(book.progress * 100))%")
+                    if let folder = book.folder, !folder.isEmpty {
+                        Label(folder, systemImage: "folder")
+                    }
                     if let last = book.lastReadAt {
                         Text(last, style: .date)
                     }
@@ -346,5 +385,53 @@ struct BookRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// 移动到分类文件夹
+struct MoveToFolderView: View {
+    let book: Book
+    let folders: [String]
+    var onMove: (String?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var newFolder = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("选择文件夹") {
+                    Button {
+                        onMove(nil); dismiss()
+                    } label: {
+                        Label("未分类", systemImage: "tray")
+                    }
+                    ForEach(folders, id: \.self) { folder in
+                        Button {
+                            onMove(folder); dismiss()
+                        } label: {
+                            Label(folder, systemImage: "folder")
+                        }
+                    }
+                }
+                Section("新建文件夹") {
+                    HStack {
+                        TextField("文件夹名称", text: $newFolder)
+                        Button("创建并移动") {
+                            let name = newFolder.trimmingCharacters(in: .whitespacesAndNewlines)
+                            onMove(name)
+                            dismiss()
+                        }
+                        .disabled(newFolder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .navigationTitle("移动到")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
     }
 }

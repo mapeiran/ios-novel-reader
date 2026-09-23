@@ -30,6 +30,8 @@ struct Book: Codable, Identifiable, Hashable {
     var parseState: ParseState?
     /// 内容哈希（用于重复导入检测）
     var contentHash: String?
+    /// 所属分类文件夹（nil = 未分类）
+    var folder: String?
 
     var isParsing: Bool {
         parseState == .pending || parseState == .parsing
