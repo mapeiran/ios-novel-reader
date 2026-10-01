@@ -176,6 +176,14 @@ enum TextFormatter {
             if count > 0 { stats.log.append("自动分段 \(count) 处") }
         }
 
+        // 3.6 段落间距：段与段之间一个空行、章节名上下各一个空行、其余空行删除
+        if options.normalizeBlankLines {
+            let before = body.components(separatedBy: "\n").count
+            body = normalizeParagraphSpacing(body)
+            let after = body.components(separatedBy: "\n").count
+            stats.blankLinesRemoved += max(0, before - after)
+        }
+
         // 4. 标点标准化
         if options.normalizePunctuation {
             body = normalizePunctuation(body)
@@ -206,6 +214,15 @@ enum TextFormatter {
     }
 
     // MARK: - 规则实现
+
+    /// 段落间距统一：去掉所有空行，再在段落之间插入一个空行。
+    /// 章节标题本身就是段落，因此自然上下各有一个空行。
+    private static func normalizeParagraphSpacing(_ text: String) -> String {
+        let paragraphs = text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: blankSet) }
+            .filter { !$0.isEmpty }
+        return paragraphs.joined(separator: "\n\n")
+    }
 
     private static func removeAds(_ text: String) -> (String, Int) {
         guard let regex = adRegex else { return (text, 0) }

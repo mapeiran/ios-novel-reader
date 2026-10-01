@@ -16,7 +16,7 @@ struct FormatPreviewView: View {
         NavigationStack {
             List {
                 Section("格式化规则（默认全部开启）") {
-                    Toggle("空行规整", isOn: $options.normalizeBlankLines)
+                    Toggle("段落间空一行（删多余空行）", isOn: $options.normalizeBlankLines)
                     Toggle("去除首尾空白 / TAB", isOn: $options.trimWhitespace)
                     Toggle("清洗乱码字符", isOn: $options.cleanGarbage)
                     Toggle("合并被切割段落", isOn: $options.mergeBrokenParagraphs)
