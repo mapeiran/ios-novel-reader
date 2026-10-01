@@ -356,32 +356,100 @@ struct ImportOptionsView: View {
     }
 }
 
+struct BookCoverView: View {
+    let book: Book
+    var width: CGFloat = 44
+    var height: CGFloat = 60
+
+    var body: some View {
+        Group {
+            if let cover = book.coverURL, let url = URL(string: cover) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    default:
+                        generated
+                    }
+                }
+            } else {
+                generated
+            }
+        }
+        .frame(width: width, height: height)
+        .clipped()
+        .cornerRadius(6)
+    }
+
+    /// 无封面时用书名生成一张默认封面（配色由书名稳定散列得到）
+    private var generated: some View {
+        ZStack {
+            LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
+            Text(shortTitle)
+                .font(.system(size: min(width, height) * 0.36, weight: .bold))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .padding(4)
+        }
+    }
+
+    private var shortTitle: String {
+        let trimmed = book.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "书" }
+        return String(trimmed.prefix(2))
+    }
+
+    private var gradient: [Color] {
+        var seed = 0
+        for scalar in book.title.unicodeScalars {
+            seed = (seed &* 31 &+ Int(scalar.value)) & 0x7fffffff
+        }
+        let hue = Double(seed % 360) / 360.0
+        return [Color(hue: hue, saturation: 0.55, brightness: 0.78),
+                Color(hue: (hue + 0.08).truncatingRemainder(dividingBy: 1), saturation: 0.62, brightness: 0.55)]
+    }
+}
+
 struct BookRow: View {
     let book: Book
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(book.title).font(.headline)
-            if book.isParsing {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.7)
-                    Text(book.parseState == .failed ? "解析失败" : "解析中…")
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-            } else {
-                HStack(spacing: 12) {
-                    Text("\(book.chapterCount) 章")
-                    Text("\(Int(book.progress * 100))%")
-                    if let folder = book.folder, !folder.isEmpty {
-                        Label(folder, systemImage: "folder")
+        HStack(alignment: .top, spacing: 12) {
+            BookCoverView(book: book)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(book.title).font(.headline).lineLimit(2)
+                if book.isParsing {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.7)
+                        Text(book.parseState == .failed ? "解析失败" : "解析中…")
                     }
-                    if let last = book.lastReadAt {
-                        Text(last, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                } else {
+                    HStack(spacing: 12) {
+                        Text("\(book.chapterCount) 章")
+                        Text("\(Int(book.progress * 100))%")
+                        if book.isCaching {
+                            Text("缓存中").foregroundColor(.orange)
+                        }
+                        if let folder = book.folder, !folder.isEmpty {
+                            Label(folder, systemImage: "folder")
+                        }
+                        if let last = book.lastReadAt {
+                            Text(last, style: .date)
+                        }
                     }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 }
-                .font(.caption)
-                .foregroundColor(.secondary)
+                if let source = book.sourceName, !source.isEmpty {
+                    Label(source, systemImage: "globe")
+                        .font(.caption2)
+                        .foregroundColor(.accentColor)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 4)

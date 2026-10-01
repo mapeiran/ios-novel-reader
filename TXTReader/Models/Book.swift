@@ -8,6 +8,12 @@ enum ParseState: String, Codable {
     case failed
 }
 
+/// 在线缓存状态
+enum CacheState: String, Codable {
+    case caching
+    case done
+}
+
 /// 一本书 = 一个导入的 TXT 文件
 struct Book: Codable, Identifiable, Hashable {
     var id: UUID = UUID()
@@ -32,8 +38,18 @@ struct Book: Codable, Identifiable, Hashable {
     var contentHash: String?
     /// 所属分类文件夹（nil = 未分类）
     var folder: String?
+    /// 在线缓存状态（nil = 本地书籍）
+    var cacheState: CacheState?
+    /// 已缓存到本地的章节数
+    var cachedChapterCount: Int?
+    /// 来源书源名称（在线导入）
+    var sourceName: String?
+    /// 封面地址（在线导入）
+    var coverURL: String?
 
     var isParsing: Bool {
         parseState == .pending || parseState == .parsing
     }
+
+    var isCaching: Bool { cacheState == .caching }
 }

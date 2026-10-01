@@ -13,6 +13,7 @@ struct OnlineSearchView: View {
     @State private var downloading = false
     @State private var downloadProgress: Double = 0
     @State private var downloadChapter = ""
+    @State private var readingBook: Book?
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,10 @@ struct OnlineSearchView: View {
             .overlay { if downloading { downloadOverlay } }
             .sheet(isPresented: $showSourceManager) {
                 BookSourceManagerView().environmentObject(sources)
+            }
+            .fullScreenCover(item: $readingBook) { book in
+                ReaderContainerView(book: book)
+                    .environmentObject(library)
             }
         }
     }
@@ -92,8 +97,22 @@ struct OnlineSearchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(results) { item in
-                Button { startDownload(item) } label: { resultRow(item) }
+                Button { startOnlineReading(item) } label: { resultRow(item) }
                     .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button { startDownload(item) } label: {
+                            Label("下载", systemImage: "arrow.down.circle")
+                        }
+                        .tint(.accentColor)
+                    }
+                    .contextMenu {
+                        Button { startOnlineReading(item) } label: {
+                            Label("在线阅读（边读边缓存）", systemImage: "book")
+                        }
+                        Button { startDownload(item) } label: {
+                            Label("下载到书架", systemImage: "arrow.down.circle")
+                        }
+                    }
             }
         }
     }
@@ -163,6 +182,32 @@ struct OnlineSearchView: View {
         }
     }
 
+    /// 在线阅读：抓目录 + 第一章后立即打开，其余章节后台缓存到本地
+    private func startOnlineReading(_ item: BookSourceService.AggregatedResult) {
+        guard let source = sources.sources.first(where: { $0.id == item.sourceID }) else { return }
+        downloading = true
+        downloadProgress = 0
+        downloadChapter = "获取目录…"
+        let result = item.result
+        Task {
+            do {
+                let book = try await OnlineReadingService.shared.start(
+                    source: source, title: result.name, author: result.author,
+                    cover: result.cover, detailURL: result.detailURL,
+                    storage: library.storage, library: library)
+                await MainActor.run {
+                    downloading = false
+                    readingBook = book
+                }
+            } catch {
+                await MainActor.run {
+                    downloading = false
+                    message = "在线阅读失败：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     private func startDownload(_ item: BookSourceService.AggregatedResult) {
         guard let source = sources.sources.first(where: { $0.id == item.sourceID }) else { return }
         downloading = true
@@ -170,7 +215,8 @@ struct OnlineSearchView: View {
         downloadChapter = "获取目录…"
         let result = item.result
         let importer = OnlineImportService(source: source, storage: library.storage)
-        importer.download(name: result.name, author: result.author, detailURL: result.detailURL) { progress, chapter in
+        importer.download(name: result.name, author: result.author, cover: result.cover,
+                          detailURL: result.detailURL) { progress, chapter in
             downloadProgress = progress
             downloadChapter = chapter
         } completion: { res in

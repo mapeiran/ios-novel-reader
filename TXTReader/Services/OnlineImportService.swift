@@ -13,6 +13,7 @@ final class OnlineImportService {
 
     func download(name: String,
                   author: String,
+                  cover: String?,
                   detailURL: String,
                   progress: @escaping (Double, String) -> Void,
                   completion: @escaping (Result<(Book, [Chapter]), Error>) -> Void) {
@@ -28,8 +29,10 @@ final class OnlineImportService {
                     await MainActor.run { progress(percent, chapter.name) }
                 }
 
-                let result = try BookImportService(storage: storage)
+                var result = try BookImportService(storage: storage)
                     .importText(text, title: name, author: author.isEmpty ? nil : author)
+                result.0.sourceName = source.name
+                result.0.coverURL = cover
                 await MainActor.run { completion(.success(result)) }
             } catch {
                 await MainActor.run { completion(.failure(error)) }
