@@ -29,8 +29,12 @@ struct FormatPreviewView: View {
                     Toggle("去除多余空格", isOn: $options.removeExtraSpaces)
                     Toggle("自动分段", isOn: $options.autoParagraph)
                     if options.autoParagraph {
+                        Picker("分段密度", selection: $options.segmentDensity) {
+                            ForEach(SegmentDensity.allCases) { Text($0.displayName).tag($0) }
+                        }
                         Stepper("单段最多 \(options.paragraphMaxLength) 字",
                                 value: $options.paragraphMaxLength, in: 50...500, step: 10)
+                        Toggle("语义校验", isOn: $options.segmentSemantic)
                     }
                     Picker("繁简转换", selection: $options.scriptConversion) {
                         ForEach(ScriptConversion.allCases) { Text($0.rawValue).tag($0) }
@@ -80,6 +84,9 @@ struct FormatPreviewView: View {
             }
             .onAppear { loadAndFormat() }
             .onChange(of: options) { _ in format() }
+            .onChange(of: options.segmentDensity) { density in
+                options.paragraphMaxLength = density.maxLength
+            }
             .alert("覆盖原文件？", isPresented: $showOverwriteConfirm) {
                 Button("取消", role: .cancel) {}
                 Button("覆盖", role: .destructive) { overwrite() }
