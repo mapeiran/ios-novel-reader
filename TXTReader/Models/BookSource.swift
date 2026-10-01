@@ -40,6 +40,11 @@ struct BookSource: Codable, Identifiable, Hashable {
     /// 正文正则（捕获组 1 = 正文 HTML）
     var contentRule: String
 
+    /// 「阅读/Legado」格式书源的原始 JSON；存在时由 LegadoRuleEngine 执行，忽略上面的正则字段
+    var legadoJSON: String?
+
+    var isLegado: Bool { legadoJSON != nil }
+
     /// 示例模板（需替换为真实规则后使用）
     static var template: BookSource {
         BookSource(name: "示例书源",

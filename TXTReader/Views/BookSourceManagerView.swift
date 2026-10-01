@@ -42,6 +42,11 @@ struct BookSourceManagerView: View {
                         Button { linkInput = ""; showLinkInput = true } label: { Label("从链接导入", systemImage: "link") }
                         Button { json = Self.templateJSON; showJSONInput = true } label: { Label("填入示例模板", systemImage: "doc.text") }
                         Divider()
+                        Button { sources.checkForUpdate() } label: {
+                            Label(sources.isUpdating ? "正在更新…" : "检查更新（整体替换）", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(sources.isUpdating)
+                        Divider()
                         Button {
                             UIPasteboard.general.string = sources.exportJSON()
                             message = "已复制全部书源到剪贴板"
@@ -65,6 +70,13 @@ struct BookSourceManagerView: View {
                 Button("好", role: .cancel) { message = nil }
             } message: {
                 Text(message ?? "")
+            }
+            .alert("书源更新", isPresented: Binding(
+                get: { sources.updateMessage != nil },
+                set: { if !$0 { sources.updateMessage = nil } })) {
+                Button("好", role: .cancel) { sources.updateMessage = nil }
+            } message: {
+                Text(sources.updateMessage ?? "")
             }
         }
     }

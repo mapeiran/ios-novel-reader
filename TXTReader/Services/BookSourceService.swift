@@ -10,7 +10,7 @@ struct OnlineSearchResult: Identifiable, Hashable {
 }
 
 /// 在线章节
-struct OnlineChapter: Identifiable, Hashable {
+struct OnlineChapter: Identifiable, Codable, Hashable {
     let id = UUID()
     let name: String
     let url: String
@@ -38,6 +38,9 @@ final class BookSourceService {
     // MARK: - 搜索
 
     func search(keyword: String, source: BookSource) async throws -> [OnlineSearchResult] {
+        if let legadoJSON = source.legadoJSON, let engine = LegadoRuleEngine(sourceJSON: legadoJSON) {
+            return try await engine.search(keyword: keyword)
+        }
         guard let encoded = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             throw BookSourceError.badURL
         }
@@ -90,8 +93,53 @@ final class BookSourceService {
                                                        result: result))
                 }
             }
-            return aggregated
+            return aggregated.sorted { lhs, rhs in
+                let ls = Self.relevanceScore(name: lhs.result.name,
+                                             author: lhs.result.author,
+                                             keyword: keyword)
+                let rs = Self.relevanceScore(name: rhs.result.name,
+                                             author: rhs.result.author,
+                                             keyword: keyword)
+                if ls != rs { return ls > rs }
+                return lhs.result.name.localizedStandardCompare(rhs.result.name) == .orderedAscending
+            }
         }
+    }
+
+    /// 与搜索词的相关度评分：书名精确 > 前缀 > 包含 > 作者匹配 > 字符覆盖；越短、匹配越靠前分越高
+    static func relevanceScore(name: String, author: String, keyword: String) -> Double {
+        let kw = keyword.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !kw.isEmpty else { return 0 }
+        let title = name.lowercased()
+        let writer = author.lowercased()
+
+        if title == kw { return 1000 }
+
+        var score: Double = 0
+        if title.hasPrefix(kw) {
+            score += 600
+        } else if title.contains(kw) {
+            score += 400
+        } else if writer == kw {
+            score += 350
+        } else if writer.contains(kw) {
+            score += 150
+        }
+
+        // 关键词字符在书名中的覆盖率
+        let chars = Array(kw)
+        if !chars.isEmpty {
+            let covered = chars.filter { title.contains($0) }.count
+            score += Double(covered) / Double(chars.count) * 100
+        }
+        // 匹配位置越靠前越相关
+        if let range = title.range(of: kw) {
+            let position = title.distance(from: title.startIndex, to: range.lowerBound)
+            score -= Double(position) * 3
+        }
+        // 书名越短越相关
+        score -= Double(title.count) * 0.5
+        return score
     }
 
     // MARK: - 书源测速
@@ -104,6 +152,15 @@ final class BookSourceService {
 
     func test(_ source: BookSource) async -> SourceHealth {
         let start = Date()
+        if let legadoJSON = source.legadoJSON, let engine = LegadoRuleEngine(sourceJSON: legadoJSON) {
+            do {
+                _ = try await engine.search(keyword: "测试")
+                return SourceHealth(ok: true, latency: Date().timeIntervalSince(start), message: nil)
+            } catch {
+                return SourceHealth(ok: false, latency: Date().timeIntervalSince(start),
+                                    message: error.localizedDescription)
+            }
+        }
         do {
             let urlString = source.searchURL
                 .replacingOccurrences(of: "{key}", with: "测试")
@@ -121,6 +178,9 @@ final class BookSourceService {
     // MARK: - 目录
 
     func chapters(detailURL: String, source: BookSource) async throws -> [OnlineChapter] {
+        if let legadoJSON = source.legadoJSON, let engine = LegadoRuleEngine(sourceJSON: legadoJSON) {
+            return try await engine.chapters(detailURL: detailURL)
+        }
         let html = try await fetch(detailURL, charset: source.charset)
         let items = captures(source.chapterListRule, in: html)
         var chapters: [OnlineChapter] = []
@@ -137,6 +197,9 @@ final class BookSourceService {
     // MARK: - 正文
 
     func content(chapterURL: String, source: BookSource) async throws -> String {
+        if let legadoJSON = source.legadoJSON, let engine = LegadoRuleEngine(sourceJSON: legadoJSON) {
+            return try await engine.content(chapterURL: chapterURL)
+        }
         let html = try await fetch(chapterURL, charset: source.charset)
         let raw = capture(source.contentRule, in: html) ?? html
         return stripHTML(raw)
