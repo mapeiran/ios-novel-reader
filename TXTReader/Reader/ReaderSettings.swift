@@ -6,6 +6,7 @@ enum PageTurnStyle: String, CaseIterable, Identifiable {
     case curl = "仿真"
     case cover = "覆盖"
     case slide = "平移"
+    case instant = "无动画"
     case verticalScroll = "滚动"
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum PageTurnStyle: String, CaseIterable, Identifiable {
         case .curl:           return "仿真翻页"
         case .cover:          return "覆盖翻页"
         case .slide:          return "平移翻页"
+        case .instant:        return "无动画翻页"
         case .verticalScroll: return "上下滚动"
         }
     }
