@@ -349,7 +349,7 @@ final class ReaderViewController: UIViewController {
     }
 
     private func jumpToProgress(_ value: Float) {
-        let total = max(1, viewModel.book.totalChars)
+        let total = max(1, (viewModel.fullText() as NSString).length)
         let offset = Int(Double(value) * Double(total))
         let chapter = viewModel.chapterIndex(forCharOffset: offset)
         let page = viewModel.pageIndex(forCharOffset: offset, chapterIndex: chapter)
@@ -927,6 +927,19 @@ final class ReaderViewController: UIViewController {
             guard let self,
                   let bookId = note.userInfo?["bookId"] as? UUID,
                   bookId == self.viewModel.book.id else { return }
+            // 缓存完成后自动格式化：按百分比保持位置整本重载
+            if (note.userInfo?["reformatted"] as? Bool) == true {
+                let percent = self.currentPercent()
+                if let chapters = note.userInfo?["chapters"] as? [Chapter] {
+                    self.viewModel.setChapters(chapters)
+                }
+                self.viewModel.reloadText()
+                self.viewModel.invalidatePagination()
+                self.cacheText = ""
+                self.lastPrefetchedChapter = -1
+                self.jumpToProgress(Float(percent) / 100.0)
+                return
+            }
             var consistent = true
             if let text = note.userInfo?["text"] as? String {
                 let offset = note.userInfo?["offset"] as? Int ?? -1

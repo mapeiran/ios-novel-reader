@@ -14,22 +14,22 @@ struct FormatOptions: Codable, Equatable {
     var detectChapters = true
     /// 广告垃圾文本清理
     var cleanAds = true
-    /// 中英文标点标准化（可选）
-    var normalizePunctuation = false
-    /// 段落首行缩进 2 字符（可选）
-    var indentParagraphs = false
+    /// 中英文标点标准化
+    var normalizePunctuation = true
+    /// 段落首行缩进 2 字符
+    var indentParagraphs = true
     /// 去除多余空格 / TAB
     var removeExtraSpaces = true
     /// 自动分段：把过长段落按句末标点拆成多段
-    var autoParagraph = false
+    var autoParagraph = true
     /// 自动分段时单段最大字数
     var paragraphMaxLength = 150
     /// 自动分段密度（紧凑/标准/松散）
     var segmentDensity: SegmentDensity = .standard
     /// 自动分段启用语义校验（关闭则纯规则）
     var segmentSemantic = true
-    /// 繁简转换
-    var scriptConversion: ScriptConversion = .none
+    /// 繁简转换（默认繁体 → 简体）
+    var scriptConversion: ScriptConversion = .toSimplified
 
     var chapterPattern: String = ChapterRule.defaultPattern
 }

@@ -236,7 +236,8 @@ final class ReaderViewModel {
         let chapter = chapters[chapterIndex]
         let pageRange = pages.indices.contains(pageIndex) ? pages[pageIndex].range : NSRange(location: 0, length: 0)
         let charOffset = chapter.start + pageRange.location
-        let total = max(1, book.totalChars)
+        // 在线缓存会持续追加，这里以实际文本长度为准
+        let total = max(1, (fullText() as NSString).length)
         let percent = min(1.0, Double(charOffset) / Double(total))
         return ReadingRecord(bookId: book.id,
                              chapterIndex: chapterIndex,

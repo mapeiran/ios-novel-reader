@@ -138,6 +138,32 @@ final class OnlineReadingService {
                                                                "done": isLast])
                 }
             }
+
+            // 缓存完成后按默认规则自动格式化一次（清洗 + 自动分段 + 繁转简）
+            let formatted = TextFormatter.format(fullText, options: FormatOptions())
+            if let data = formatted.text.data(using: .utf8) {
+                try? data.write(to: fileURL, options: .atomic)
+                let reformatted = ChapterParser.parse(text: formatted.text, bookId: bookId, pattern: pattern)
+                let length = (formatted.text as NSString).length
+                await MainActor.run {
+                    var updated = book
+                    updated.totalChars = length
+                    updated.fileSize = Int64(data.count)
+                    updated.cachedChapterCount = catalog.count
+                    updated.cacheState = .done
+                    library.update(updated, chapters: reformatted)
+                    self?.saveCatalog(Catalog(source: source, chapters: catalog, cached: catalog.count),
+                                      bookId: bookId, storage: storage)
+                    NotificationCenter.default.post(name: .onlineBookCacheUpdated, object: nil,
+                                                    userInfo: ["bookId": bookId,
+                                                               "chapters": reformatted,
+                                                               "cached": catalog.count,
+                                                               "total": catalog.count,
+                                                               "done": true,
+                                                               "reformatted": true])
+                }
+            }
+
             await MainActor.run {
                 guard let self else { return }
                 self.lock.lock(); self.tasks.removeValue(forKey: bookId); self.lock.unlock()

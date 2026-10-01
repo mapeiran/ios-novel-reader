@@ -15,15 +15,13 @@ struct FormatPreviewView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("清洗规则") {
+                Section("格式化规则（默认全部开启）") {
                     Toggle("空行规整", isOn: $options.normalizeBlankLines)
                     Toggle("去除首尾空白 / TAB", isOn: $options.trimWhitespace)
                     Toggle("清洗乱码字符", isOn: $options.cleanGarbage)
                     Toggle("合并被切割段落", isOn: $options.mergeBrokenParagraphs)
                     Toggle("章节智能识别", isOn: $options.detectChapters)
                     Toggle("广告文本清理", isOn: $options.cleanAds)
-                }
-                Section("高级（可选）") {
                     Toggle("标点标准化", isOn: $options.normalizePunctuation)
                     Toggle("首行缩进 2 字符", isOn: $options.indentParagraphs)
                     Toggle("去除多余空格", isOn: $options.removeExtraSpaces)
