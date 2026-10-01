@@ -27,6 +27,11 @@ struct FormatPreviewView: View {
                     Toggle("标点标准化", isOn: $options.normalizePunctuation)
                     Toggle("首行缩进 2 字符", isOn: $options.indentParagraphs)
                     Toggle("去除多余空格", isOn: $options.removeExtraSpaces)
+                    Toggle("自动分段", isOn: $options.autoParagraph)
+                    if options.autoParagraph {
+                        Stepper("单段最多 \(options.paragraphMaxLength) 字",
+                                value: $options.paragraphMaxLength, in: 50...500, step: 10)
+                    }
                     Picker("繁简转换", selection: $options.scriptConversion) {
                         ForEach(ScriptConversion.allCases) { Text($0.rawValue).tag($0) }
                     }
@@ -38,6 +43,7 @@ struct FormatPreviewView: View {
                         statRow("识别章节", "\(result.stats.chapters) 章")
                         statRow("清理广告", "\(result.stats.adsRemoved) 行")
                         statRow("合并断行", "\(result.stats.paragraphsMerged) 处")
+                        statRow("自动分段", "\(result.stats.paragraphsSplit) 处")
                         statRow("清洗异常", "\(result.stats.garbageLines) 行")
                         statRow("删除空行", "\(result.stats.blankLinesRemoved) 行")
                     }

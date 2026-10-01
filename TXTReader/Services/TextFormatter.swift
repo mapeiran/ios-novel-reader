@@ -20,6 +20,10 @@ struct FormatOptions: Codable, Equatable {
     var indentParagraphs = false
     /// 去除多余空格 / TAB
     var removeExtraSpaces = true
+    /// 自动分段：把过长段落按句末标点拆成多段
+    var autoParagraph = false
+    /// 自动分段时单段最大字数
+    var paragraphMaxLength = 150
     /// 繁简转换
     var scriptConversion: ScriptConversion = .none
 
@@ -42,6 +46,7 @@ struct FormatStats {
     var paragraphsMerged = 0
     var adsRemoved = 0
     var garbageLines = 0
+    var paragraphsSplit = 0
     var chapters = 0
     var log: [String] = []
 }
@@ -150,6 +155,17 @@ enum TextFormatter {
 
         var body = out.joined(separator: "\n")
 
+        // 3.5 自动分段
+        if options.autoParagraph {
+            let (split, count) = autoSplitParagraphs(body,
+                                                     maxLength: options.paragraphMaxLength,
+                                                     detectChapters: options.detectChapters,
+                                                     chapterRegex: chapterRegex)
+            body = split
+            stats.paragraphsSplit = count
+            if count > 0 { stats.log.append("自动分段 \(count) 处") }
+        }
+
         // 4. 标点标准化
         if options.normalizePunctuation {
             body = normalizePunctuation(body)
@@ -180,6 +196,70 @@ enum TextFormatter {
     }
 
     // MARK: - 规则实现
+
+    /// 自动分段：过长的段落按句末标点拆分成多段
+    private static func autoSplitParagraphs(_ text: String, maxLength: Int,
+                                            detectChapters: Bool,
+                                            chapterRegex: NSRegularExpression?) -> (String, Int) {
+        guard maxLength > 0 else { return (text, 0) }
+        var splitCount = 0
+        var result: [String] = []
+        for line in text.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: blankSet)
+            if trimmed.isEmpty { result.append(""); continue }
+            if detectChapters && isChapterTitle(trimmed, regex: chapterRegex) {
+                result.append(trimmed)
+                continue
+            }
+            if trimmed.count <= maxLength {
+                result.append(trimmed)
+                continue
+            }
+            let pieces = splitLongParagraph(trimmed, maxLength: maxLength)
+            splitCount += max(0, pieces.count - 1)
+            result.append(contentsOf: pieces)
+        }
+        return (result.joined(separator: "\n"), splitCount)
+    }
+
+    private static func splitLongParagraph(_ paragraph: String, maxLength: Int) -> [String] {
+        let enders = "。！？…"
+        let closers = "”』」）】\"'"
+        let chars = Array(paragraph)
+        var pieces: [String] = []
+        var current = ""
+        var i = 0
+        while i < chars.count {
+            current.append(chars[i])
+            if enders.contains(chars[i]) {
+                // 吸收紧跟的收尾引号/括号，避免把它们甩到下一段
+                while i + 1 < chars.count, closers.contains(chars[i + 1]) {
+                    i += 1
+                    current.append(chars[i])
+                }
+                if current.count >= maxLength {
+                    pieces.append(current)
+                    current = ""
+                }
+            }
+            i += 1
+        }
+        if !current.isEmpty { pieces.append(current) }
+        return pieces.flatMap { hardWrap($0, maxLength: maxLength) }
+    }
+
+    /// 没有句末标点的超长片段按字数硬切，避免出现超长段落
+    private static func hardWrap(_ text: String, maxLength: Int) -> [String] {
+        guard text.count > maxLength else { return [text] }
+        var pieces: [String] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            let end = text.index(index, offsetBy: maxLength, limitedBy: text.endIndex) ?? text.endIndex
+            pieces.append(String(text[index..<end]))
+            index = end
+        }
+        return pieces
+    }
 
     private static func removeAds(_ text: String) -> (String, Int) {
         guard let regex = adRegex else { return (text, 0) }
