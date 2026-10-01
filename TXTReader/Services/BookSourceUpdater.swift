@@ -3,9 +3,9 @@ import Foundation
 /// 可更新书源：从本项目 GitHub 仓库拉取「书源.json」并整体替换
 enum BookSourceUpdater {
 
-    /// 本项目 GitHub 仓库中 书源.json 的 raw 地址。
-    /// 未配置 remote 时先占位；可用 UserDefaults key "bookSource.updateURL" 覆盖。
-    static let defaultUpdateURL = "https://raw.githubusercontent.com/OWNER/REPO/main/书源.json"
+    /// 本项目 GitHub 仓库中 书源.json 的 raw 地址（main 分支根目录）。
+    /// 可用 UserDefaults key "bookSource.updateURL" 覆盖。
+    static let defaultUpdateURL = "https://raw.githubusercontent.com/mapeiran/ios-novel-reader/main/%E4%B9%A6%E6%BA%90.json"
 
     static var updateURL: String {
         UserDefaults.standard.string(forKey: "bookSource.updateURL") ?? defaultUpdateURL
