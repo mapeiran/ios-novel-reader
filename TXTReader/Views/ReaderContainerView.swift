@@ -26,6 +26,10 @@ struct ReaderContainerView: View {
             .onChange(of: library.books) { _ in
                 refreshChapters()
             }
+            .onDisappear {
+                // 退出阅读后刷新书架上的阅读进度（延后一拍，确保阅读器已保存记录）
+                DispatchQueue.main.async { library.reload() }
+            }
             .overlay(alignment: .topLeading) {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
