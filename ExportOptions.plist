@@ -7,7 +7,7 @@
     <string>app-store-connect</string>
     <!-- 换成你的付费团队 ID（Apple Developer 会员的 Team ID） -->
     <key>teamID</key>
-    <string>REPLACE_WITH_PAID_TEAM_ID</string>
+    <string>28JH8J3ZPU</string>
     <key>uploadSymbols</key>
     <true/>
     <key>compileBitcode</key>
